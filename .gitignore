@@ -3,6 +3,7 @@
 *.pth
 *_model/
 models/
+data/final_training_v3.jsonl
 
 checkpoint-*/
 logs/

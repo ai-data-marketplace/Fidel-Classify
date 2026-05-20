@@ -13,27 +13,25 @@ class MultiHeadAfriBERTa(nn.Module):
     """
     def __init__(self, config_path: str, num_domain_labels: int):
         super().__init__()
-        # Load config from the snapshot directory
         config = AutoConfig.from_pretrained(config_path)
-        # Initialize backbone without pretrained weights since we will load state_dict later
         self.backbone = AutoModel.from_config(config)
         
         hidden = config.hidden_size
         drop_p = (getattr(config, "classifier_dropout", None) or config.hidden_dropout_prob)
 
-        # ── Language Head (binary) ──
+        # Language Head (binary) 
         self.lang_head = nn.Sequential(
             nn.Dropout(drop_p),
             nn.Linear(hidden, 2),
         )
 
-        # ── Readability Head (binary) ──
+        # Readability Head (binary)
         self.read_head = nn.Sequential(
             nn.Dropout(drop_p),
             nn.Linear(hidden, 2),
         )
 
-        # ── Domain Head (exact match to reference) ──
+        # Domain Head (exact match to reference)
         self.domain_dropout = nn.Dropout(drop_p)
         self.domain_dense   = nn.Linear(hidden, hidden)
         self.domain_out     = nn.Linear(hidden, num_domain_labels)
@@ -45,7 +43,7 @@ class MultiHeadAfriBERTa(nn.Module):
         lang_logits = self.lang_head(cls_tok)
         read_logits = self.read_head(cls_tok)
 
-        # Domain head – matches XLMRobertaClassificationHead
+        # Domain head
         x = self.domain_dropout(cls_tok)
         x = self.domain_dense(x)
         x = torch.tanh(x)
