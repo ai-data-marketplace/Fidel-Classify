@@ -83,7 +83,7 @@ class TextQualityModel:
     def predict(self, text: str) -> dict:
         """
         Runs inference on the provided text and returns classifications for
-        language, readability, and domain.
+        language, readability, and domain. Applies strict threshold constraints.
         """
         if not text.strip():
             return {"error": "Empty input text"}
@@ -108,31 +108,54 @@ class TextQualityModel:
             read_probs = torch.softmax(read_logits, dim=-1).squeeze(0)
             domain_probs = torch.softmax(domain_logits, dim=-1).squeeze(0)
             
-            # Predictions
+            # Initial baseline predictions based purely on max logit
             lang_pred = lang_logits.argmax(dim=-1).item()
             read_pred = read_logits.argmax(dim=-1).item()
             domain_pred = domain_logits.argmax(dim=-1).item()
 
+        # Extract underlying scalar confidence values
+        lang_conf = float(lang_probs[lang_pred])
+        read_conf = float(read_probs[read_pred])
+        domain_conf = float(domain_probs[domain_pred])
+
+        # --- Threshold Validation Logic ---
+        
+        # Rule 1: Language must be Amharic with > 97% confidence
+        if lang_pred == 1 and lang_conf < 0.97:
+            lang_label = "Other/Mixed"
+            # Recalculate confidence for the flipped category
+            lang_conf = float(lang_probs[0])
+        else:
+            lang_label = "Amharic" if lang_pred == 1 else "Other/Mixed"
+
+        # Rule 2: Readability must be Clear with > 95% confidence
+        if read_pred == 1 and read_conf < 0.95:
+            read_label = "Broken/OCR"
+            # Recalculate confidence for the flipped category
+            read_conf = float(read_probs[0])
+        else:
+            read_label = "Clear" if read_pred == 1 else "Broken/OCR"
+
         return {
             "language": {
-                "label": "Amharic" if lang_pred == 1 else "Other/Mixed",
-                "confidence": float(lang_probs[lang_pred])
+                "label": lang_label,
+                "confidence": lang_conf
             },
             "readability": {
-                "label": "Clear" if read_pred == 1 else "Broken/OCR",
-                "confidence": float(read_probs[read_pred])
+                "label": read_label,
+                "confidence": read_conf
             },
             "domain": {
                 "label": DOMAIN_LABELS[domain_pred],
-                "confidence": float(domain_probs[domain_pred])
+                "confidence": domain_conf
             }
         }
 
+
 if __name__ == "__main__":
-    # Example usage
     try:
         model = TextQualityModel("amanfisseha/multihead-afriberta")
-        result = model.predict("በአጠቃላይ የፖለቲካ መረጋጋት ለሀገር ኢኮኖሚ እድገት መሰረት ነው። ኢንቨስተሮች በሀገር ውስጥ መዋዕለ ንዋያቸውን ለማፍሰስ ሰላም ይፈልጋሉ። የህዝቡ የኑሮ ሁኔታ መሻሻል ደግሞ ለፖለቲካዊ መረጋጋት አስተዋፅኦ ያደርጋል። መንግስት በልማት ስራዎች ላይ የሚያደርገው ኢንቨስትመንት ለዜጎች የስራ እድል ከመፍጠሩም በላይ ድህነትን ለመቀነስ ይረዳል። ማህበራዊ ፍትህ ሲረጋገጥ እና ዜጎች በሀገራቸው ጉዳይ እኩል ተሳታፊ ሲሆኑ አንድነት ይጠናከራል። ነገር ግን የሃብት ክፍፍል ኢ-ፍትሃዊ ከሆነ ለግጭት መንስኤ ሊሆን ይችላል። ሁሉም የልማት ስራዎች የህዝቡን ፍላጎት መሰረት ያደረጉ መሆን አለባቸው።")
+        result = model.predict("ክትባት ገበያ ላይ አዋጅ ለማስተማር ጸሎት ። ፊስካል በበሽታው ላይ የተደነገገውን በፓርላማው ቅዱስ ። ወንጌል ዳኛውን በካፒታል ውስጥ ፈረደበት አከመው መጽሐፍ ዲሞክራሲን ትምህርት ቤቱ ። ሕጉ ሆስፒታል ገብቶ ፖሊሲውን በምዕራፍ አራት ስብከት አንብቦ ፈወሰው ።")
         print("Prediction Result:", result)
     except Exception as e:
         print(f"Error initializing model or predicting: {e}")
