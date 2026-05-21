@@ -6,18 +6,20 @@ from huggingface_hub import snapshot_download
 
 DOMAIN_LABELS = ["Education", "Health", "Religion", "Politics", "Law", "General", "Finance"]
 
-class MultiHeadAfriBERTa(nn.Module):
+class MultiHeadRoberta(nn.Module):
     """
-    Shared XLM-R backbone with three classification heads.
-    Matches the architecture from the training script exactly.
+    Shared RoBERTa backbone with three classification heads.
+    Matches the architecture for the rasyosef/roberta-base-amharic model.
     """
     def __init__(self, config_path: str, num_domain_labels: int):
         super().__init__()
         config = AutoConfig.from_pretrained(config_path)
+        # Initialize architecture skeleton from config to avoid OSError searching for .bin files
         self.backbone = AutoModel.from_config(config)
         
         hidden = config.hidden_size
-        drop_p = (getattr(config, "classifier_dropout", None) or config.hidden_dropout_prob)
+        drop_p = (getattr(config, "classifier_dropout", None) or 
+                  getattr(config, "hidden_dropout_prob", 0.1))
 
         # Language Head (binary) 
         self.lang_head = nn.Sequential(
@@ -31,7 +33,7 @@ class MultiHeadAfriBERTa(nn.Module):
             nn.Linear(hidden, 2),
         )
 
-        # Domain Head (exact match to reference)
+        # Domain Head
         self.domain_dropout = nn.Dropout(drop_p)
         self.domain_dense   = nn.Linear(hidden, hidden)
         self.domain_out     = nn.Linear(hidden, num_domain_labels)
@@ -43,7 +45,7 @@ class MultiHeadAfriBERTa(nn.Module):
         lang_logits = self.lang_head(cls_tok)
         read_logits = self.read_head(cls_tok)
 
-        # Domain head
+        # Domain head logic
         x = self.domain_dropout(cls_tok)
         x = self.domain_dense(x)
         x = torch.tanh(x)
@@ -54,20 +56,19 @@ class MultiHeadAfriBERTa(nn.Module):
 
 
 class TextQualityModel:
-    def __init__(self, repo_id: str = "amanfisseha/multihead-afriberta"):
+    def __init__(self, repo_id: str = "amanfisseha/multihead-rasyosef-amharic"):
         """
-        Downloads the model snapshot from Hugging Face Hub, initializes the architecture,
-        loads the state dictionary, and sets up the tokenizer.
+        Downloads model snapshot from HF Hub, initializes MultiHeadRoberta,
+        and loads fine-tuned weights from model.pt.
         """
         print(f"Downloading/loading snapshot from {repo_id}...")
         snapshot_dir = snapshot_download(repo_id)
 
         self.tokenizer = AutoTokenizer.from_pretrained(snapshot_dir)
         
-        # Initialize the model architecture based on the downloaded config
-        self.model = MultiHeadAfriBERTa(config_path=snapshot_dir, num_domain_labels=len(DOMAIN_LABELS))
+        # Use renamed class
+        self.model = MultiHeadRoberta(config_path=snapshot_dir, num_domain_labels=len(DOMAIN_LABELS))
         
-        # Load the PyTorch weights
         model_path = os.path.join(snapshot_dir, "model.pt")
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Expected to find model.pt in {snapshot_dir}")
@@ -75,20 +76,14 @@ class TextQualityModel:
         print("Loading weights from model.pt...")
         self.model.load_state_dict(torch.load(model_path, map_location=torch.device("cpu")))
         
-        # Move to GPU if available and set to eval mode
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
         self.model.eval()
 
     def predict(self, text: str) -> dict:
-        """
-        Runs inference on the provided text and returns classifications for
-        language, readability, and domain. Applies strict threshold constraints.
-        """
         if not text.strip():
             return {"error": "Empty input text"}
 
-        # Tokenize
         enc = self.tokenizer(
             text,
             truncation=True,
@@ -103,59 +98,42 @@ class TextQualityModel:
         with torch.no_grad():
             lang_logits, read_logits, domain_logits = self.model(input_ids, attention_mask)
             
-            # Apply softmax to get probabilities
             lang_probs = torch.softmax(lang_logits, dim=-1).squeeze(0)
             read_probs = torch.softmax(read_logits, dim=-1).squeeze(0)
             domain_probs = torch.softmax(domain_logits, dim=-1).squeeze(0)
             
-            # Initial baseline predictions based purely on max logit
             lang_pred = lang_logits.argmax(dim=-1).item()
             read_pred = read_logits.argmax(dim=-1).item()
             domain_pred = domain_logits.argmax(dim=-1).item()
 
-        # Extract underlying scalar confidence values
         lang_conf = float(lang_probs[lang_pred])
         read_conf = float(read_probs[read_pred])
         domain_conf = float(domain_probs[domain_pred])
 
-        # --- Threshold Validation Logic ---
-        
-        # Rule 1: Language must be Amharic with > 97% confidence
+        # --- Quality Thresholds ---
         if lang_pred == 1 and lang_conf < 0.97:
             lang_label = "Other/Mixed"
-            # Recalculate confidence for the flipped category
             lang_conf = float(lang_probs[0])
         else:
             lang_label = "Amharic" if lang_pred == 1 else "Other/Mixed"
 
-        # Rule 2: Readability must be Clear with > 95% confidence
         if read_pred == 1 and read_conf < 0.95:
             read_label = "Broken/OCR"
-            # Recalculate confidence for the flipped category
             read_conf = float(read_probs[0])
         else:
             read_label = "Clear" if read_pred == 1 else "Broken/OCR"
 
         return {
-            "language": {
-                "label": lang_label,
-                "confidence": lang_conf
-            },
-            "readability": {
-                "label": read_label,
-                "confidence": read_conf
-            },
-            "domain": {
-                "label": DOMAIN_LABELS[domain_pred],
-                "confidence": domain_conf
-            }
+            "language": {"label": lang_label, "confidence": lang_conf},
+            "readability": {"label": read_label, "confidence": read_conf},
+            "domain": {"label": DOMAIN_LABELS[domain_pred], "confidence": domain_conf}
         }
 
 
 if __name__ == "__main__":
     try:
-        model = TextQualityModel("amanfisseha/multihead-afriberta")
-        result = model.predict("ክትባት ገበያ ላይ አዋጅ ለማስተማር ጸሎት ። ፊስካል በበሽታው ላይ የተደነገገውን በፓርላማው ቅዱስ ። ወንጌል ዳኛውን በካፒታል ውስጥ ፈረደበት አከመው መጽሐፍ ዲሞክራሲን ትምህርት ቤቱ ። ሕጉ ሆስፒታል ገብቶ ፖሊሲውን በምዕራፍ አራት ስብከት አንብቦ ፈወሰው ።")
+        model = TextQualityModel("amanfisseha/multihead-rasyosef-amharic")
+        result = model.predict("ጠቅላይ ሚኒስትር ዐቢይ አሕመድ አገራዊ ምክክር እየተደረገ ያለው በአገሪቱ ሕገ መንግሥት ያለ ማብቂያ የተቀመጠውን የአገሪቱን መሪ የሥልጣን ዘመን ለመገደብ መሆኑን ተናገሩ። መንግሥት ሥልጣኑ በሕግ ተገድቦ ሕገ መንግሥት እንዲሻሻል እየጠየቀ ባለበት ሁኔታ በአገራዊ ምክክሩ አንወያይም ያሉ አካላትን ተችተዋል።")
         print("Prediction Result:", result)
     except Exception as e:
         print(f"Error initializing model or predicting: {e}")

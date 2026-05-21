@@ -295,3 +295,47 @@ print(f"  Macro P      : {eval_results.get('eval_macro_p', 0):.4f}")
 print(f"  Macro R      : {eval_results.get('eval_macro_r', 0):.4f}")
 print(f"\n  Model saved to : {OUTPUT_DIR}")
 print("="*60)
+
+import time
+
+def calculate_unk_coverage(tokenizer, texts):
+    """Calculates the percentage of [UNK] tokens in the dataset."""
+    total_tokens = 0
+    unk_tokens = 0
+    for text in texts:
+        ids = tokenizer.encode(text, add_special_tokens=False)
+        total_tokens += len(ids)
+        unk_tokens += ids.count(tokenizer.unk_token_id)
+    return (unk_tokens / total_tokens) * 100 if total_tokens > 0 else 0
+
+def measure_latency(model, tokenizer, texts, device):
+    """Measures average inference time per chunk in milliseconds."""
+    model.eval()
+    latencies = []
+    # Test on a sample of 100 
+    sample_texts = texts[:100] 
+    with torch.no_grad():
+        for text in sample_texts:
+            inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=256).to(device)
+            start_time = time.time()
+            _ = model(**inputs)
+            latencies.append((time.time() - start_time) * 1000) # to ms
+    return np.mean(latencies)
+
+print("\nCalculating final comparative metrics...")
+unk_rate = calculate_unk_coverage(tokenizer, test_df["text"].tolist())
+avg_latency = measure_latency(model, tokenizer, test_df["text"].tolist(), DEVICE)
+
+final_data = {
+    "model_name": MODEL_NAME,
+    "macro_f1": eval_results.get("eval_macro_f1"),
+    "accuracy": eval_results.get("eval_accuracy"),
+    "unk_coverage_pct": unk_rate,
+    "avg_latency_ms": avg_latency,
+    "params": total_params
+}
+
+# Save as JSON for download
+with open(os.path.join(OUTPUT_DIR, "research_results.json"), "w") as f:
+    json.dump(final_data, f, indent=4)
+print(f"Research results saved to {OUTPUT_DIR}/research_results.json")
