@@ -1,0 +1,8 @@
+{
+    "model_name": "castorini/afriberta_base",
+    "macro_f1": 0.9545335413559579,
+    "accuracy": 0.9560201874549387,
+    "unk_coverage_pct": 0.0,
+    "avg_latency_ms": 6.151776313781738,
+    "params": 111460615
+}

@@ -1,0 +1,8 @@
+{
+    "model_name": "xlm-roberta-base",
+    "macro_f1": 0.94612287099775,
+    "accuracy": 0.9480894015861572,
+    "unk_coverage_pct": 0.03870611003594139,
+    "avg_latency_ms": 8.349261283874512,
+    "params": 278049031
+}

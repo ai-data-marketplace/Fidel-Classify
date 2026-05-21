@@ -1,0 +1,8 @@
+{
+    "model_name": "rasyosef/roberta-base-amharic",
+    "macro_f1": 0.9669044401817103,
+    "accuracy": 0.9675558759913482,
+    "unk_coverage_pct": 0.0,
+    "avg_latency_ms": 8.37874174118042,
+    "params": 110621959
+}
