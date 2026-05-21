@@ -1,6 +1,6 @@
-# Amh-Domain-Sense
+# Fidel-Classify
 
-Amh-Domain-Sense is a dual-purpose system designed for Amharic text classification:
+Fidel-Classify is a dual-purpose system designed for Amharic text classification:
 - **A Research Framework** for evaluating and comparing Amharic text classification architectures.
   - **Model Comparison**: Evaluating the performance of monolingual Amharic models (`rasyosef/roberta-base-amharic`) against multilingual baselines (AfriBERTa and XLM-RoBERTa).
 - **A Production Engine** for backend platform inference.
@@ -16,7 +16,7 @@ The core of the system utilizes a **Multi-Head RoBERTa architecture** featuring 
 ## Folder Structure
 
 ```text
-Amh-Domain-Sense/
+Fidel-Classify/
 ├── data/
 │   ├── final_training_v3.jsonl
 │   └── test_inference.jsonl
