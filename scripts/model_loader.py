@@ -133,7 +133,7 @@ class TextQualityModel:
 if __name__ == "__main__":
     try:
         model = TextQualityModel("amanfisseha/multihead-rasyosef-amharic")
-        result = model.predict("ጠቅላይ ሚኒስትር ዐቢይ አሕመድ አገራዊ ምክክር እየተደረገ ያለው በአገሪቱ ሕገ መንግሥት ያለ ማብቂያ የተቀመጠውን የአገሪቱን መሪ የሥልጣን ዘመን ለመገደብ መሆኑን ተናገሩ። መንግሥት ሥልጣኑ በሕግ ተገድቦ ሕገ መንግሥት እንዲሻሻል እየጠየቀ ባለበት ሁኔታ በአገራዊ ምክክሩ አንወያይም ያሉ አካላትን ተችተዋል።")
+        result = model.predict("የኢትዮጵያ ብሄራዊ ቡድን ለዓለም ዋንጫ ማጣሪያ ዝግጅቱን በአዳማ ከተማ በከፍተኛ ተነሳሽነት ጀምሯል።")
         print("Prediction Result:", result)
     except Exception as e:
         print(f"Error initializing model or predicting: {e}")
